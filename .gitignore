@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.env
+
+# Secrets
+*.key
+*.pem
+secrets.*
+
+# Results (large; keep schema.md but not run data — remove this if you want to commit results)
+results/run_*.jsonl
+results/run_*.json
+results/run_*.csv
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp

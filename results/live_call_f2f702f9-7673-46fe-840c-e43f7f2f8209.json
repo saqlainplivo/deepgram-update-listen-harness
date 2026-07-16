@@ -1,0 +1,395 @@
+{
+  "call_uuid": "f2f702f9-7673-46fe-840c-e43f7f2f8209",
+  "eot_sweep": [
+    {
+      "eot_threshold": 0.5,
+      "eager_eot_threshold": 0.45,
+      "sent_ts": 1784220612.027018,
+      "ack_ts": 1784220612.460238,
+      "round_trip_ms": 433.21990966796875,
+      "errors_in_window": []
+    },
+    {
+      "eot_threshold": 0.7,
+      "eager_eot_threshold": 0.65,
+      "sent_ts": 1784220632.53185,
+      "ack_ts": 1784220632.874572,
+      "round_trip_ms": 342.722,
+      "errors_in_window": []
+    },
+    {
+      "eot_threshold": 0.9,
+      "eager_eot_threshold": 0.85,
+      "sent_ts": 1784220652.533055,
+      "ack_ts": 1784220652.776828,
+      "round_trip_ms": 243.773,
+      "errors_in_window": []
+    }
+  ],
+  "all_events": [
+    {
+      "ts": 1784220591.720541,
+      "type": "Welcome"
+    },
+    {
+      "ts": 1784220591.9423912,
+      "type": "SettingsApplied"
+    },
+    {
+      "ts": 1784220592.0094368,
+      "type": "ConversationText"
+    },
+    {
+      "ts": 1784220592.0104902,
+      "type": "History"
+    },
+    {
+      "ts": 1784220596.727701,
+      "type": "AgentAudioDone"
+    },
+    {
+      "ts": 1784220611.509413,
+      "type": "UserStartedSpeaking"
+    },
+    {
+      "ts": 1784220612.4448671,
+      "type": "ConversationText"
+    },
+    {
+      "ts": 1784220612.44508,
+      "type": "History"
+    },
+    {
+      "ts": 1784220612.460238,
+      "type": "ListenUpdated"
+    },
+    {
+      "ts": 1784220612.58477,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220612.600003,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220612.644466,
+      "type": "ConversationText"
+    },
+    {
+      "ts": 1784220612.644796,
+      "type": "History"
+    },
+    {
+      "ts": 1784220612.644876,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220612.64495,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220614.4068859,
+      "type": "ConversationText"
+    },
+    {
+      "ts": 1784220614.407451,
+      "type": "History"
+    },
+    {
+      "ts": 1784220615.824351,
+      "type": "AgentAudioDone"
+    },
+    {
+      "ts": 1784220621.669434,
+      "type": "UserStartedSpeaking"
+    },
+    {
+      "ts": 1784220622.265014,
+      "type": "ConversationText"
+    },
+    {
+      "ts": 1784220622.286491,
+      "type": "History"
+    },
+    {
+      "ts": 1784220622.636713,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220622.644489,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220622.7266781,
+      "type": "ConversationText"
+    },
+    {
+      "ts": 1784220622.727057,
+      "type": "History"
+    },
+    {
+      "ts": 1784220622.727179,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220622.727374,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220622.963716,
+      "type": "UserStartedSpeaking"
+    },
+    {
+      "ts": 1784220622.96402,
+      "type": "AgentAudioDone"
+    },
+    {
+      "ts": 1784220623.0469298,
+      "type": "ConversationText"
+    },
+    {
+      "ts": 1784220623.06513,
+      "type": "History"
+    },
+    {
+      "ts": 1784220623.4320781,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220623.4458501,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220623.506497,
+      "type": "ConversationText"
+    },
+    {
+      "ts": 1784220623.50686,
+      "type": "History"
+    },
+    {
+      "ts": 1784220623.506944,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220623.507021,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220626.796662,
+      "type": "AgentAudioDone"
+    },
+    {
+      "ts": 1784220632.874572,
+      "type": "ListenUpdated"
+    },
+    {
+      "ts": 1784220632.9371772,
+      "type": "UserStartedSpeaking"
+    },
+    {
+      "ts": 1784220635.4650161,
+      "type": "ConversationText"
+    },
+    {
+      "ts": 1784220635.484332,
+      "type": "History"
+    },
+    {
+      "ts": 1784220635.7621498,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220635.763499,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220635.825236,
+      "type": "ConversationText"
+    },
+    {
+      "ts": 1784220635.825562,
+      "type": "History"
+    },
+    {
+      "ts": 1784220635.825741,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220635.8258188,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220638.182553,
+      "type": "ConversationText"
+    },
+    {
+      "ts": 1784220638.183187,
+      "type": "History"
+    },
+    {
+      "ts": 1784220638.832818,
+      "type": "AgentAudioDone"
+    },
+    {
+      "ts": 1784220645.992059,
+      "type": "UserStartedSpeaking"
+    },
+    {
+      "ts": 1784220648.308644,
+      "type": "ConversationText"
+    },
+    {
+      "ts": 1784220648.324299,
+      "type": "History"
+    },
+    {
+      "ts": 1784220648.640655,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220648.644639,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220648.7238169,
+      "type": "ConversationText"
+    },
+    {
+      "ts": 1784220648.724205,
+      "type": "History"
+    },
+    {
+      "ts": 1784220648.724287,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220648.724362,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220652.354049,
+      "type": "AgentAudioDone"
+    },
+    {
+      "ts": 1784220652.7768278,
+      "type": "ListenUpdated"
+    },
+    {
+      "ts": 1784220658.868276,
+      "type": "UserStartedSpeaking"
+    },
+    {
+      "ts": 1784220660.627497,
+      "type": "ConversationText"
+    },
+    {
+      "ts": 1784220660.64274,
+      "type": "History"
+    },
+    {
+      "ts": 1784220660.7209668,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220660.7219782,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220660.802301,
+      "type": "ConversationText"
+    },
+    {
+      "ts": 1784220660.802495,
+      "type": "History"
+    },
+    {
+      "ts": 1784220660.802536,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220660.802669,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220662.081275,
+      "type": "UserStartedSpeaking"
+    },
+    {
+      "ts": 1784220662.0816698,
+      "type": "AgentAudioDone"
+    },
+    {
+      "ts": 1784220662.62961,
+      "type": "ConversationText"
+    },
+    {
+      "ts": 1784220662.643713,
+      "type": "History"
+    },
+    {
+      "ts": 1784220662.967836,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220662.9823859,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220663.06226,
+      "type": "ConversationText"
+    },
+    {
+      "ts": 1784220663.06266,
+      "type": "History"
+    },
+    {
+      "ts": 1784220663.062818,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220663.062976,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220664.50189,
+      "type": "AgentAudioDone"
+    },
+    {
+      "ts": 1784220669.359565,
+      "type": "UserStartedSpeaking"
+    },
+    {
+      "ts": 1784220671.21912,
+      "type": "ConversationText"
+    },
+    {
+      "ts": 1784220671.222259,
+      "type": "History"
+    },
+    {
+      "ts": 1784220671.521203,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220671.522326,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220671.602797,
+      "type": "ConversationText"
+    },
+    {
+      "ts": 1784220671.6034298,
+      "type": "History"
+    },
+    {
+      "ts": 1784220671.6035368,
+      "type": "LatencyReport"
+    },
+    {
+      "ts": 1784220671.60363,
+      "type": "LatencyReport"
+    }
+  ]
+}
