@@ -42,7 +42,7 @@ audio glitch and no session restart.
 ### Step 1 — Download the code
 
 ```bash
-git clone https://github.com/plivodev/deepgram-update-listen-harness.git
+git clone https://github.com/saqlainplivo/deepgram-update-listen-harness.git
 cd deepgram-update-listen-harness
 ```
 
@@ -160,7 +160,7 @@ no glitch.  This harness measures whether that claim holds.
 ### Install
 
 ```bash
-git clone https://github.com/YOUR_ORG/deepgram-update-listen-harness.git
+git clone https://github.com/saqlainplivo/deepgram-update-listen-harness.git
 cd deepgram-update-listen-harness
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
@@ -327,11 +327,7 @@ complete field reference.
 
 ## Results
 
-> **These results will be populated when you run the harness with a real
-> Deepgram API key and real (or synthetic) audio.  The table below is a
-> template; figures marked `TBD` must be replaced with actual measured values.**
-
-Two runs were performed: one with **synthetic audio** (idle baseline, no agent activity) and one with **TTS speech audio** (macOS `say` voice, real conversations). Results are presented for both.
+Three runs were performed: one with **synthetic audio** (idle baseline, no agent activity) and one with **TTS speech audio** (macOS `say` voice, real conversations). Results are presented for both.
 
 ---
 
@@ -418,7 +414,7 @@ The table below maps each claim to a specific harness measurement.  Fill in
 | Deepgram claim | Harness measurement | Outcome |
 |----------------|---------------------|---------|
 | `ListenUpdated` ack is always returned | All 8 `UpdateListen` calls across both runs eventually received a `ListenUpdated` ack | ✅ **CONFIRMED** — ack always arrived eventually |
-| Reconfiguration is seamless / prompt | Idle session: mean **341 ms**. TTS load: mean **9,839 ms** (range 2–18 s). Live call: mean **340 ms** | ⚠️ **PARTIALLY CONFIRMED** — acks are prompt when the agent is idle or between turns (~340 ms); significantly delayed when the agent is mid-utterance. Not instant as "seamless" implies, but recovers quickly. |
+| Reconfiguration is seamless / prompt | Idle session: mean **341 ms**. TTS load: mean **9,839 ms**, max **18,188 ms**. Live call: mean **340 ms** | ❌ **NOT CONFIRMED under load** — idle and between-turn acks are fast (~340 ms), but under active speech processing the reconfiguration took up to **18 seconds**. That is not seamless by any reasonable definition. Deepgram's claim holds only when the agent has nothing in flight. |
 | No session restart required | Single WebSocket stayed alive through all 8 updates across two full runs (4,161 events, ~4 min session) | ✅ **CONFIRMED** — no reconnection required |
 | No audio glitch / errors at reconfiguration point | `errors_in_window` = 0 for all 8 `UpdateListen` calls in both runs | ✅ **CONFIRMED** — zero errors, zero `POOR_AUDIO_QUALITY` warnings |
 | keyterms boost recognition of injected terms | Recall of "Plivo" rose from **33% → 75% (+42 pp)** after `UpdateListen(keyterms=["Plivo"])` in the TTS run | ✅ **CONFIRMED** — measurable improvement within the same call. Pre-injection mis-transcriptions: "PLEVO", "Playvovo", "Flavio". |
@@ -435,9 +431,7 @@ The table below maps each claim to a specific harness measurement.  Fill in
 - **Multi-language switching** — `language_hints` field was not exercised.
 - **Concurrent UpdateListen calls** — we send one update at a time and wait for ack.
 - **Production call volumes** — this harness tests a single session at a time.
-- **Specific telephony carriers** — Plivo SIP trunk was not available in the
-  initial test environment.  Results are from a direct WebSocket connection, not
-  an inbound phone call.
+- **Other telephony carriers** — only Plivo was tested (Run C, call UUID `f2f702f9-7673-46fe-840c-e43f7f2f8209`). Behaviour on other PSTN carriers (Twilio, Vonage, etc.) has not been measured.
 - **Non-Deepgram STT providers** — `UpdateListen` was only tested with
   `"type": "deepgram"` as the listen provider.
 - **eot_timeout_ms** — this parameter was not swept independently (could be a
