@@ -25,3 +25,4 @@ results/run_*.csv
 .vscode/
 .idea/
 *.swp
+*.aiff
