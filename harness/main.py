@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import os
 import sys
@@ -34,6 +35,12 @@ from pathlib import Path
 
 # Make the package importable when run as `python -m harness.main` from repo root
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv not installed; rely on env vars being set externally
 
 from harness.session import (
     DeepgramAgentSession,
@@ -60,7 +67,11 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--scenario", default="all",
-        choices=["all", "eot_sweep", "keyterm", "combined"],
+        choices=[
+            "all", "eot_sweep", "keyterm", "combined",
+            "eot_timeout_sweep", "concurrent", "update_think",
+            "update_speak", "inject_agent", "inject_user", "all_extended",
+        ],
         help="Which scenario(s) to run (default: all)",
     )
     p.add_argument(
@@ -148,6 +159,31 @@ async def run(args: argparse.Namespace) -> None:
         if args.scenario in ("all", "combined"):
             await sc.combined_update(session, metrics)
 
+        # Extended scenarios
+        if args.scenario in ("eot_timeout_sweep", "all_extended"):
+            result = await sc.eot_timeout_ms_sweep(session, metrics)
+            _log_extended_result("eot_timeout_sweep", result)
+
+        if args.scenario in ("concurrent", "all_extended"):
+            result = await sc.concurrent_update_listen(session, metrics)
+            _log_extended_result("concurrent", result)
+
+        if args.scenario in ("update_think", "all_extended"):
+            result = await sc.update_think(session, metrics)
+            _log_extended_result("update_think", result)
+
+        if args.scenario in ("update_speak", "all_extended"):
+            result = await sc.update_speak(session, metrics)
+            _log_extended_result("update_speak", result)
+
+        if args.scenario in ("inject_agent", "all_extended"):
+            result = await sc.inject_agent_message(session, metrics)
+            _log_extended_result("inject_agent", result)
+
+        if args.scenario in ("inject_user", "all_extended"):
+            result = await sc.inject_user_message(session, metrics)
+            _log_extended_result("inject_user", result)
+
     scenario_tasks = [run_all_scenarios()]
 
     log.info("Starting session (duration=%.0f s, scenarios=%s)", args.duration, args.scenario)
@@ -169,6 +205,21 @@ async def run(args: argparse.Namespace) -> None:
     summary = metrics.finalize()
     print_summary_table(summary)
     log.info("Done. Results written to results/")
+
+
+def _log_extended_result(scenario: str, result) -> None:
+    """Pretty-print extended scenario results to stdout and save to results/."""
+    from harness.metrics import RESULTS_DIR
+    import time as _time
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    ts = _time.strftime("%Y%m%dT%H%M%S")
+    path = RESULTS_DIR / f"run_{ts}_{scenario}_extended.json"
+    path.write_text(json.dumps(result, indent=2))
+    print(f"\n{'═'*60}")
+    print(f"  Extended Scenario: {scenario}")
+    print(f"{'═'*60}")
+    print(json.dumps(result, indent=2))
+    print(f"  Results saved: {path}\n")
 
 
 def main() -> None:

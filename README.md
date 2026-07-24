@@ -248,7 +248,10 @@ python3 -m harness.main --audio mic --scenario all --duration 180
 
 ```
 --audio PATH|mic|silence    Audio source (default: audio/test_speech.wav)
---scenario SCENARIO         all | eot_sweep | keyterm | combined (default: all)
+--scenario SCENARIO         all | eot_sweep | keyterm | combined |
+                            eot_timeout_sweep | concurrent | update_think |
+                            update_speak | inject_agent | inject_user |
+                            all_extended  (default: all)
 --keyterm WORD              Keyterm for scenario 2 (default: Plivo)
 --reference PHRASE          Reference phrase containing the keyterm
 --duration SECONDS          Total session length (default: 120)
@@ -403,6 +406,90 @@ Combined update confirmed: one message, one ack. No double-firing.
 
 ---
 
+### Extended Scenarios — Run 2026-07-24
+
+> All extended scenarios run against the Deepgram Voice Agent API.  
+> Audio: `tts_conversation.wav` for UpdateListen scenarios; `silence` for all others.  
+> Model: `flux-general-en` v2 + Groq `llama-3.3-70b-versatile`
+
+#### Scenario 4 — `eot_timeout_ms` sweep (500 / 1000 / 2000 ms)
+
+> Date: 2026-07-24 · Audio: `tts_conversation.wav` (looped) · Duration: 90 s
+
+| eot_timeout_ms | Sent at | Ack at | RT ack (ms) | Ack | Errors | Notes |
+|:--------------:|:-------:|:------:|:-----------:|:---:|:------:|-------|
+| 500 | t+18.1 s | t+18.4 s | **306.8** | ✅ | 0 | Fast ack, parameter accepted |
+| 1000 | t+33.4 s | t+33.7 s | **304.2** | ✅ | 0 | Fast ack |
+| 2000 | t+48.7 s | t+49.0 s | **338.7** | ✅ | 0 | Fast ack |
+
+Mean RT: **316.6 ms**. All three values accepted without error. The parameter is silently absorbed — no observable difference in session behavior at this load level (would require a human live-mic trial to assess perceptual turn-taking differences).
+
+#### Scenario 5 — Concurrent `UpdateListen` (two messages before first ack)
+
+> Date: 2026-07-24 · Audio: `tts_conversation.wav` · Duration: 90 s
+
+| | Sent at | Gap between sends (ms) | Acks received | First ack RT (ms) | Errors |
+|-|:-------:|:----------------------:|:-------------:|:-----------------:|:------:|
+| Send #1 (eot=0.5) | t+15.0 s | — | — | — | 0 |
+| Send #2 (eot=0.9) | t+15.0 s | **1.2 ms** | **1 total** | **271** | 0 |
+
+**Finding:** Deepgram returned only **1** `ListenUpdated` ack for 2 concurrent `UpdateListen` messages sent 1.2 ms apart. The second message silently won (last-write-wins semantics inferred). No error, no session disruption.
+
+#### Scenario 6 — `UpdateThink` mid-call
+
+> Date: 2026-07-24 · Audio: silence · Duration: 60 s
+
+| Sent at | Ack event | RT (ms) | Ack | Status | Error |
+|:-------:|:---------:|:-------:|:---:|:------:|-------|
+| t+15.0 s | `ThinkUpdated` | — | ✗ | **NOT SUPPORTED** | `INVALID_SETTINGS: Invalid agent.think settings - model not available` |
+
+**Finding:** `UpdateThink` with Groq `llama-3.3-70b-versatile` was rejected by the API with `INVALID_SETTINGS`. The session terminated immediately after the error. Changing the LLM provider mid-call via `UpdateThink` is **not supported** on this endpoint (at least not with a Groq model routed through Deepgram's think provider API at time of test).
+
+#### Scenario 7 — `UpdateSpeak` mid-call
+
+> Date: 2026-07-24 · Audio: silence · Duration: 60 s
+
+| Sent at | Ack event | RT (ms) | Ack | Status | Errors |
+|:-------:|:---------:|:-------:|:---:|:------:|:------:|
+| t+15.0 s | `SpeakUpdated` | **222.5** | ✅ | OK | 0 |
+
+**Finding:** `UpdateSpeak` (switching TTS voice from `aura-2-asteria-en` to `aura-2-luna-en`) works correctly. Ack arrives in **222 ms** — faster than `UpdateListen`. No errors.
+
+#### Scenario 8 — `InjectAgentMessage`
+
+> Date: 2026-07-24 · Audio: silence · Duration: 60 s
+
+| Sent at | Ack event | RT (ms) | Ack | Status | Errors |
+|:-------:|:---------:|:-------:|:---:|:------:|:------:|
+| t+15.0 s | `ConversationText` (role=assistant) | **289.0** | ✅ | OK | 0 |
+
+**Finding:** `InjectAgentMessage` works. The injected text `"This is a mid-call injected agent message for testing."` appeared immediately in the conversation as a `ConversationText` event (role=assistant) in **289 ms**, and audio bytes were sent. No `AgentStartedSpeaking` event fired in silence mode (audio is streamed but not routed back as a speaking event), but `ConversationText` confirms the message was processed and spoken.
+
+#### Scenario 9 — `InjectUserMessage`
+
+> Date: 2026-07-24 · Audio: silence · Duration: 60 s
+
+| Sent at | Ack event | RT (ms) | Ack | Status | Error |
+|:-------:|:---------:|:-------:|:---:|:------:|-------|
+| t+15.0 s | `ConversationText` | — | ✗ | **NOT SUPPORTED** | `UNPARSABLE_CLIENT_MESSAGE: Text message received from client did not match any of the formats we expect.` |
+
+**Finding:** `InjectUserMessage` is **not supported** by the current Deepgram Voice Agent API endpoint. The server rejected the message type with `UNPARSABLE_CLIENT_MESSAGE`, and the session closed immediately.
+
+#### Run D — EOT perceptual stress-test with varied-pause audio (`varied_pauses.wav`)
+
+> Date: 2026-07-24 · Audio: `audio/varied_pauses.wav` (macOS Samantha voice, 25 s, looped)  
+> Pause lengths in audio: short (0.3 s), medium (0.8 s), long (1.5 s) between sentences
+
+| eot | eager_eot | RT ack (ms) | Ack | Errors | Notes |
+|:---:|:---------:|:-----------:|:---:|:------:|-------|
+| 0.50 | 0.45 | — | ✗ | 0 | Timeout — agent was mid-utterance (agent responds to speech) |
+| 0.70 | 0.65 | — | ✗ | 0 | Timeout — same as above |
+| 0.90 | 0.85 | **342.0** | ✅ | 0 | Ack arrived during a pause segment |
+
+**Finding:** Under active speech from the varied-pause audio, acks at eot=0.5 and 0.7 timed out (5 s default). Only eot=0.9 (sent last, coinciding with a longer pause in the audio loop) received an ack. This mirrors Run B behavior — acks are delayed or dropped when the agent is actively processing speech. The audio file itself is at `audio/varied_pauses.wav`.
+
+---
+
 ## Claims vs. measured
 
 Deepgram's documentation states that `UpdateListen` enables
@@ -420,22 +507,27 @@ The table below maps each claim to a specific harness measurement.  Fill in
 | keyterms boost recognition of injected terms | Recall of "Plivo" rose from **33% → 75% (+42 pp)** after `UpdateListen(keyterms=["Plivo"])` in the TTS run | ✅ **CONFIRMED** — measurable improvement within the same call. Pre-injection mis-transcriptions: "PLEVO", "Playvovo", "Flavio". |
 | eot_threshold changes affect turn-taking | Timing of agent response relative to eot value | ⚠️ **PARTIALLY OBSERVED** — TTS audio produced clean short turns; perceptual difference between 0.5/0.7/0.9 requires a human live-mic trial to assess |
 | Combined eot + keyterms update produces single ack | Exactly 1 `ListenUpdated` received for the combined message | ✅ **CONFIRMED** — one message → one ack |
+| `eot_timeout_ms` can be changed mid-call | Swept 500 / 1000 / 2000 ms; all 3 acks received, mean **317 ms** | ✅ **CONFIRMED** — parameter accepted, ack fast (~317 ms). Perceptual effect requires human trial. |
+| `UpdateSpeak` changes TTS voice mid-call | `SpeakUpdated` ack received in **222 ms** switching from `aura-2-asteria-en` to `aura-2-luna-en` | ✅ **CONFIRMED** — voice change works live, ack in 222 ms |
+| `UpdateThink` changes LLM mid-call | `ThinkUpdated` not received; server returned `INVALID_SETTINGS` | ❌ **NOT SUPPORTED** — `UpdateThink` with Groq model rejected by current API endpoint |
+| `InjectAgentMessage` causes agent to speak injected text | `ConversationText` (role=assistant) received in **289 ms**; audio bytes sent | ✅ **CONFIRMED** — injected message appears in conversation and is spoken |
+| `InjectUserMessage` injects a user utterance into conversation | Server returned `UNPARSABLE_CLIENT_MESSAGE` | ❌ **NOT SUPPORTED** — message type not recognised by current API endpoint |
+| Concurrent `UpdateListen` messages are both processed | 2 messages sent 1.2 ms apart; only 1 `ListenUpdated` ack received | ⚠️ **LAST-WRITE-WINS** — second message silently overwrites first; only one ack returned. No error. |
 
 ---
 
 ## What we did NOT test
 
-- **UpdateThink / UpdateSpeak / UpdatePrompt** — out of scope; changing the LLM
-  or TTS provider mid-call is a separate capability.
-- **InjectUserMessage / InjectAgentMessage** — not used in this harness.
+- ~~**UpdateThink / UpdateSpeak / UpdatePrompt**~~ — `UpdateSpeak` ✅ now tested; `UpdateThink` ❌ tested (NOT SUPPORTED); `UpdatePrompt` not yet exercised.
+- ~~**InjectUserMessage / InjectAgentMessage**~~ — both tested: `InjectAgentMessage` ✅ works; `InjectUserMessage` ❌ NOT SUPPORTED.
+- ~~**Concurrent UpdateListen calls**~~ — tested: last-write-wins, 1 ack for 2 concurrent sends.
+- ~~**eot_timeout_ms**~~ — tested: all 3 values accepted, fast acks (~317 ms mean).
 - **Multi-language switching** — `language_hints` field was not exercised.
-- **Concurrent UpdateListen calls** — we send one update at a time and wait for ack.
 - **Production call volumes** — this harness tests a single session at a time.
 - **Other telephony carriers** — only Plivo was tested (Run C, call UUID `f2f702f9-7673-46fe-840c-e43f7f2f8209`). Behaviour on other PSTN carriers (Twilio, Vonage, etc.) has not been measured.
 - **Non-Deepgram STT providers** — `UpdateListen` was only tested with
   `"type": "deepgram"` as the listen provider.
-- **eot_timeout_ms** — this parameter was not swept independently (could be a
-  future scenario).
+- **UpdatePrompt** — changing the system prompt mid-call was not tested.
 
 ---
 

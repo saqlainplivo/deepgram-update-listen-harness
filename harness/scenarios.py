@@ -254,3 +254,445 @@ def _count_keyterm_hits(transcripts: list[str], keyterm: str) -> int:
     """Count how many transcripts contain the keyterm (case-insensitive)."""
     kl = keyterm.lower()
     return sum(1 for t in transcripts if kl in t.lower())
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Scenario 4 — eot_timeout_ms sweep
+# ──────────────────────────────────────────────────────────────────────────────
+
+EOT_TIMEOUT_MS_VALUES = [500, 1000, 2000]
+
+
+async def eot_timeout_ms_sweep(
+    session: DeepgramAgentSession,
+    metrics: MetricsCollector,
+    soak_s: float = 15.0,
+) -> list[dict]:
+    """Sweep eot_timeout_ms through 500, 1000, 2000 ms."""
+    log.info("[Scenario 4] eot_timeout_ms sweep starting. Waiting for SettingsApplied...")
+
+    # Wait for SettingsApplied
+    try:
+        await _wait_for_event(session, "SettingsApplied", timeout_s=10.0)
+    except asyncio.TimeoutError:
+        log.warning("[Scenario 4] SettingsApplied not seen within 10 s; proceeding anyway.")
+
+    await asyncio.sleep(soak_s)
+
+    results = []
+    for timeout_ms in EOT_TIMEOUT_MS_VALUES:
+        log.info("[Scenario 4] Sending UpdateListen eot_timeout_ms=%d", timeout_ms)
+        sent_ts = time.time()
+
+        result: UpdateListenResult = await session.send_update_listen(
+            eot_timeout_ms=timeout_ms,
+            timeout_s=10.0,
+        )
+
+        entry = {
+            "scenario": "eot_timeout_ms_sweep",
+            "eot_timeout_ms": timeout_ms,
+            "sent_ts": result.sent_ts,
+            "ack_ts": result.ack_ts,
+            "round_trip_ms": result.round_trip_ms,
+            "ack_received": result.ack_ts is not None,
+            "errors": result.errors_in_window,
+        }
+        results.append(entry)
+        log.info("[Scenario 4] eot_timeout_ms=%d  RT=%.1f ms  ack=%s",
+                 timeout_ms, result.round_trip_ms or -1, result.ack_ts is not None)
+
+        await asyncio.sleep(soak_s)
+
+    log.info("[Scenario 4] eot_timeout_ms sweep complete.")
+    return results
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Scenario 5 — concurrent UpdateListen
+# ──────────────────────────────────────────────────────────────────────────────
+
+async def concurrent_update_listen(
+    session: DeepgramAgentSession,
+    metrics: MetricsCollector,
+    duration_s: float = 60.0,
+) -> dict:
+    """Send two UpdateListen messages without waiting for first ack. Record both acks."""
+    log.info("[Scenario 5] concurrent_update_listen starting.")
+
+    try:
+        await _wait_for_event(session, "SettingsApplied", timeout_s=10.0)
+    except asyncio.TimeoutError:
+        log.warning("[Scenario 5] SettingsApplied not seen within 10 s; proceeding anyway.")
+
+    await asyncio.sleep(15.0)
+
+    import json as _json
+
+    # Build two messages manually so we can send without awaiting acks
+    msg1 = {
+        "type": "UpdateListen",
+        "listen": {
+            "provider": {
+                "type": "deepgram",
+                "version": "v2",
+                "model": "flux-general-en",
+                "eot_threshold": 0.5,
+                "eager_eot_threshold": 0.45,
+            }
+        }
+    }
+    msg2 = {
+        "type": "UpdateListen",
+        "listen": {
+            "provider": {
+                "type": "deepgram",
+                "version": "v2",
+                "model": "flux-general-en",
+                "eot_threshold": 0.9,
+                "eager_eot_threshold": 0.85,
+            }
+        }
+    }
+
+    sent_ts1 = time.time()
+    await session._send_json(msg1)
+    log.info("[Scenario 5] Sent UpdateListen #1 (eot=0.5) at %.3f", sent_ts1)
+
+    sent_ts2 = time.time()
+    await session._send_json(msg2)
+    log.info("[Scenario 5] Sent UpdateListen #2 (eot=0.9) at %.3f — no wait for #1 ack", sent_ts2)
+
+    # Now collect acks from the event stream for up to 10 s
+    deadline = time.time() + 10.0
+    acks_received = []
+    while time.time() < deadline and len(acks_received) < 2:
+        await asyncio.sleep(0.1)
+        for evt in session.events:
+            if evt.msg_type == "ListenUpdated" and evt.ts > sent_ts1:
+                if not any(a["ack_ts"] == evt.ts for a in acks_received):
+                    acks_received.append({"ack_ts": evt.ts, "rt_ms": (evt.ts - sent_ts1) * 1000})
+
+    result = {
+        "scenario": "concurrent_update_listen",
+        "sent_ts_1": sent_ts1,
+        "sent_ts_2": sent_ts2,
+        "gap_between_sends_ms": (sent_ts2 - sent_ts1) * 1000,
+        "acks_received": len(acks_received),
+        "ack_details": acks_received,
+        "errors": [e.payload for e in session.events
+                   if e.msg_type in ("Error", "Warning") and e.ts > sent_ts1 - 1],
+    }
+    log.info("[Scenario 5] concurrent_update_listen complete: %d ack(s) received. Details: %s",
+             len(acks_received), result)
+    return result
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Scenario 6 — UpdateThink mid-call
+# ──────────────────────────────────────────────────────────────────────────────
+
+async def update_think(
+    session: DeepgramAgentSession,
+    metrics: MetricsCollector,
+    duration_s: float = 60.0,
+) -> dict:
+    """Send UpdateThink mid-call. Measure ack latency."""
+    log.info("[Scenario 6] update_think starting.")
+
+    try:
+        await _wait_for_event(session, "SettingsApplied", timeout_s=10.0)
+    except asyncio.TimeoutError:
+        log.warning("[Scenario 6] SettingsApplied not seen within 10 s; proceeding anyway.")
+
+    await asyncio.sleep(15.0)
+
+    msg = {
+        "type": "UpdateThink",
+        "think": {
+            "provider": {
+                "type": "groq",
+                "model": "llama-3.3-70b-versatile",
+                "temperature": 0.3,
+            }
+        }
+    }
+
+    sent_ts = time.time()
+    try:
+        await session._send_json(msg)
+        log.info("[Scenario 6] UpdateThink sent at %.3f", sent_ts)
+    except Exception as e:
+        log.error("[Scenario 6] Failed to send UpdateThink: %s", e)
+        return {
+            "scenario": "update_think",
+            "sent_ts": sent_ts,
+            "error": str(e),
+            "ack_received": False,
+            "round_trip_ms": None,
+            "status": "NOT_SUPPORTED",
+        }
+
+    # Wait for ThinkUpdated ack
+    ack_ts = None
+    try:
+        ack_ts = await _wait_for_event_after(session, "ThinkUpdated", after_ts=sent_ts, timeout_s=10.0)
+        rt_ms = (ack_ts - sent_ts) * 1000
+        log.info("[Scenario 6] ThinkUpdated ack received in %.1f ms", rt_ms)
+    except asyncio.TimeoutError:
+        log.warning("[Scenario 6] ThinkUpdated ack timed out after 10 s")
+        rt_ms = None
+
+    # Check for errors
+    errors = [e.payload for e in session.events
+              if e.msg_type in ("Error", "Warning") and abs(e.ts - sent_ts) <= 5.0]
+
+    result = {
+        "scenario": "update_think",
+        "sent_ts": sent_ts,
+        "ack_ts": ack_ts,
+        "round_trip_ms": rt_ms,
+        "ack_received": ack_ts is not None,
+        "errors": errors,
+        "status": "OK" if ack_ts is not None else ("NOT_SUPPORTED" if errors else "TIMEOUT"),
+    }
+    log.info("[Scenario 6] update_think complete: %s", result)
+    return result
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Scenario 7 — UpdateSpeak mid-call
+# ──────────────────────────────────────────────────────────────────────────────
+
+async def update_speak(
+    session: DeepgramAgentSession,
+    metrics: MetricsCollector,
+    duration_s: float = 60.0,
+) -> dict:
+    """Send UpdateSpeak mid-call (change voice). Measure ack latency."""
+    log.info("[Scenario 7] update_speak starting.")
+
+    try:
+        await _wait_for_event(session, "SettingsApplied", timeout_s=10.0)
+    except asyncio.TimeoutError:
+        log.warning("[Scenario 7] SettingsApplied not seen within 10 s; proceeding anyway.")
+
+    await asyncio.sleep(15.0)
+
+    msg = {
+        "type": "UpdateSpeak",
+        "speak": {
+            "provider": {
+                "type": "deepgram",
+                "model": "aura-2-luna-en",
+            }
+        }
+    }
+
+    sent_ts = time.time()
+    try:
+        await session._send_json(msg)
+        log.info("[Scenario 7] UpdateSpeak sent at %.3f", sent_ts)
+    except Exception as e:
+        log.error("[Scenario 7] Failed to send UpdateSpeak: %s", e)
+        return {
+            "scenario": "update_speak",
+            "sent_ts": sent_ts,
+            "error": str(e),
+            "ack_received": False,
+            "round_trip_ms": None,
+            "status": "NOT_SUPPORTED",
+        }
+
+    # Wait for SpeakUpdated ack
+    ack_ts = None
+    try:
+        ack_ts = await _wait_for_event_after(session, "SpeakUpdated", after_ts=sent_ts, timeout_s=10.0)
+        rt_ms = (ack_ts - sent_ts) * 1000
+        log.info("[Scenario 7] SpeakUpdated ack received in %.1f ms", rt_ms)
+    except asyncio.TimeoutError:
+        log.warning("[Scenario 7] SpeakUpdated ack timed out after 10 s")
+        rt_ms = None
+
+    errors = [e.payload for e in session.events
+              if e.msg_type in ("Error", "Warning") and abs(e.ts - sent_ts) <= 5.0]
+
+    result = {
+        "scenario": "update_speak",
+        "sent_ts": sent_ts,
+        "ack_ts": ack_ts,
+        "round_trip_ms": rt_ms,
+        "ack_received": ack_ts is not None,
+        "errors": errors,
+        "status": "OK" if ack_ts is not None else ("NOT_SUPPORTED" if errors else "TIMEOUT"),
+    }
+    log.info("[Scenario 7] update_speak complete: %s", result)
+    return result
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Scenario 8 — InjectAgentMessage
+# ──────────────────────────────────────────────────────────────────────────────
+
+async def inject_agent_message(
+    session: DeepgramAgentSession,
+    metrics: MetricsCollector,
+    duration_s: float = 60.0,
+) -> dict:
+    """Send InjectAgentMessage. Verify it appears as AgentStartedSpeaking."""
+    log.info("[Scenario 8] inject_agent_message starting.")
+
+    try:
+        await _wait_for_event(session, "SettingsApplied", timeout_s=10.0)
+    except asyncio.TimeoutError:
+        log.warning("[Scenario 8] SettingsApplied not seen within 10 s; proceeding anyway.")
+
+    await asyncio.sleep(15.0)
+
+    msg = {
+        "type": "InjectAgentMessage",
+        "message": "This is a mid-call injected agent message for testing.",
+    }
+
+    sent_ts = time.time()
+    try:
+        await session._send_json(msg)
+        log.info("[Scenario 8] InjectAgentMessage sent at %.3f", sent_ts)
+    except Exception as e:
+        log.error("[Scenario 8] Failed to send InjectAgentMessage: %s", e)
+        return {
+            "scenario": "inject_agent_message",
+            "sent_ts": sent_ts,
+            "error": str(e),
+            "ack_received": False,
+            "round_trip_ms": None,
+            "status": "NOT_SUPPORTED",
+        }
+
+    # Wait for ConversationText (role=assistant) — this is the actual ack for InjectAgentMessage.
+    # AgentStartedSpeaking may or may not arrive depending on audio routing.
+    ack_ts = None
+    try:
+        ack_ts = await _wait_for_event_after(session, "ConversationText", after_ts=sent_ts, timeout_s=10.0)
+        rt_ms = (ack_ts - sent_ts) * 1000
+        log.info("[Scenario 8] ConversationText received in %.1f ms after inject", rt_ms)
+    except asyncio.TimeoutError:
+        # Fallback: check for AgentStartedSpeaking
+        try:
+            ack_ts = await _wait_for_event_after(session, "AgentStartedSpeaking", after_ts=sent_ts, timeout_s=5.0)
+            rt_ms = (ack_ts - sent_ts) * 1000
+            log.info("[Scenario 8] AgentStartedSpeaking received in %.1f ms after inject", rt_ms)
+        except asyncio.TimeoutError:
+            log.warning("[Scenario 8] No ConversationText or AgentStartedSpeaking within timeout")
+            rt_ms = None
+
+    errors = [e.payload for e in session.events
+              if e.msg_type in ("Error", "Warning") and abs(e.ts - sent_ts) <= 5.0]
+
+    result = {
+        "scenario": "inject_agent_message",
+        "sent_ts": sent_ts,
+        "ack_ts": ack_ts,
+        "round_trip_ms": rt_ms,
+        "ack_received": ack_ts is not None,
+        "errors": errors,
+        "status": "OK" if ack_ts is not None else ("NOT_SUPPORTED" if errors else "TIMEOUT"),
+    }
+    log.info("[Scenario 8] inject_agent_message complete: %s", result)
+    return result
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Scenario 9 — InjectUserMessage
+# ──────────────────────────────────────────────────────────────────────────────
+
+async def inject_user_message(
+    session: DeepgramAgentSession,
+    metrics: MetricsCollector,
+    duration_s: float = 60.0,
+) -> dict:
+    """Send InjectUserMessage. Verify it appears in ConversationText."""
+    log.info("[Scenario 9] inject_user_message starting.")
+
+    try:
+        await _wait_for_event(session, "SettingsApplied", timeout_s=10.0)
+    except asyncio.TimeoutError:
+        log.warning("[Scenario 9] SettingsApplied not seen within 10 s; proceeding anyway.")
+
+    await asyncio.sleep(15.0)
+
+    msg = {
+        "type": "InjectUserMessage",
+        "message": "testing inject user message",
+    }
+
+    sent_ts = time.time()
+    try:
+        await session._send_json(msg)
+        log.info("[Scenario 9] InjectUserMessage sent at %.3f", sent_ts)
+    except Exception as e:
+        log.error("[Scenario 9] Failed to send InjectUserMessage: %s", e)
+        return {
+            "scenario": "inject_user_message",
+            "sent_ts": sent_ts,
+            "error": str(e),
+            "ack_received": False,
+            "round_trip_ms": None,
+            "status": "NOT_SUPPORTED",
+        }
+
+    # Wait for ConversationText
+    ack_ts = None
+    try:
+        ack_ts = await _wait_for_event_after(session, "ConversationText", after_ts=sent_ts, timeout_s=10.0)
+        rt_ms = (ack_ts - sent_ts) * 1000
+        log.info("[Scenario 9] ConversationText received in %.1f ms after inject", rt_ms)
+    except asyncio.TimeoutError:
+        log.warning("[Scenario 9] ConversationText not received within 10 s")
+        rt_ms = None
+
+    errors = [e.payload for e in session.events
+              if e.msg_type in ("Error", "Warning") and abs(e.ts - sent_ts) <= 5.0]
+
+    result = {
+        "scenario": "inject_user_message",
+        "sent_ts": sent_ts,
+        "ack_ts": ack_ts,
+        "round_trip_ms": rt_ms,
+        "ack_received": ack_ts is not None,
+        "errors": errors,
+        "status": "OK" if ack_ts is not None else ("NOT_SUPPORTED" if errors else "TIMEOUT"),
+    }
+    log.info("[Scenario 9] inject_user_message complete: %s", result)
+    return result
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Extended scenario helper: wait for event type
+# ──────────────────────────────────────────────────────────────────────────────
+
+async def _wait_for_event(session: DeepgramAgentSession, event_type: str, timeout_s: float = 10.0) -> float:
+    """Poll session.events until event_type appears. Returns the event timestamp."""
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        for evt in session.events:
+            if evt.msg_type == event_type:
+                return evt.ts
+        await asyncio.sleep(0.1)
+    raise asyncio.TimeoutError(f"Event {event_type!r} not seen within {timeout_s} s")
+
+
+async def _wait_for_event_after(
+    session: DeepgramAgentSession,
+    event_type: str,
+    after_ts: float,
+    timeout_s: float = 10.0,
+) -> float:
+    """Poll session.events for event_type with ts > after_ts. Returns event timestamp."""
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        for evt in session.events:
+            if evt.msg_type == event_type and evt.ts > after_ts:
+                return evt.ts
+        await asyncio.sleep(0.1)
+    raise asyncio.TimeoutError(f"Event {event_type!r} after ts={after_ts} not seen within {timeout_s} s")
