@@ -6,7 +6,7 @@ settings (end-of-turn sensitivity, keyword boosting) live inside a call, with no
 audio glitch and no session restart.
 
 > **Status: complete with real measured results.**  
-> All three `UpdateListen` scenarios have been validated — including a live Plivo phone call.
+> Nine scenarios tested end-to-end — including a live Plivo phone call. Covers `UpdateListen` (eot sweep, keyterms, concurrent, eot_timeout_ms), `UpdateSpeak`, `InjectAgentMessage`, and two API gaps (`UpdateThink`, `InjectUserMessage` — not supported by current endpoint).  
 > See [Results](#results) for numbers and [Quick Start](#quick-start-5-minutes) for the fastest path to run it yourself.
 
 ---
@@ -196,10 +196,7 @@ The harness supports three audio input modes:
 | Silence | `--audio silence` | Sends silent frames — useful for connectivity smoke-tests. |
 
 **Audio used in the published results:**
-> Synthetic audio (`audio/test_speech.wav` — alternating 2 s silence / 2 s 440 Hz tone,
-> 30 s duration, mono 16-bit 16 kHz).  A Plivo SIP trunk was **not** available in the
-> test environment; if you have one, pass `--audio mic` while on a live call or supply
-> a WAV exported from a real phone call.  See `audio/README.md` for details and caveats.
+> Four audio sources were used across runs: synthetic silence (smoke tests), `test_speech.wav` (440 Hz sine / silence, 30 s), `tts_conversation.wav` (macOS Samantha TTS, 38 s conversational speech about Plivo), and `varied_pauses.wav` (Samantha TTS with 0.3 s / 0.8 s / 1.5 s inter-sentence pauses for eot stress testing). Run C used a live Plivo SIP call with a human speaker. See `audio/README.md` for details.
 
 ---
 
